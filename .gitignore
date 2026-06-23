@@ -1,0 +1,17 @@
+# Data and media files
+static/*.csv
+static/*.mp4
+static/*.mov
+static/*.numbers
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# macOS
+.DS_Store
+
+# Flask
+instance/

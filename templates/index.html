@@ -1,0 +1,2154 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Robot monitor</title>
+<script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #F2F3F7; color: #222;
+  }
+  /* 整體垂直 flex 排版 */
+  #app {
+    display: flex; flex-direction: column;
+    height: 100vh; overflow: hidden;
+  }
+  #top-section { flex-shrink: 0; display: flex; flex-direction: column; overflow: hidden; background: #F2F3F7; }
+  #bottom-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 80px; padding: 12px 16px 12px; gap: 12px; background: #F2F3F7; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; flex-shrink: 0;
+    background: #fff; border-bottom: 1px solid #e0e0d8;
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  #sync-badge {
+    font-size: 12px; padding: 2px 10px; border-radius: 20px;
+    background: #e6f4ea; color: #2e7d32; font-weight: 500;
+  }
+  #file-labels { margin-left: auto; font-size: 12px; color: #888; }
+
+  /* ── Video row ── */
+  .video-row {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 12px; border-bottom: none;
+    flex: 1; min-height: 0; overflow: hidden;
+    padding: 0 16px;
+  }
+  .video-panel {
+    padding: 0;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .video-panel h2, #single-data-panel h2 { font-size: 12px; font-weight: 500; color: #000; margin-bottom: 0; flex-shrink: 0; }
+  .video-wrap {
+    position: relative; background: #e8e8ec;
+    border-radius: 8px; overflow: hidden;
+    flex: 1; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .video-wrap video { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+
+  /* ── 拖曳分割線 ── */
+  .video-resize-handle {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    width: 48px; height: 5px; border-radius: 3px;
+    background: rgba(255,255,255,0.5);
+    cursor: row-resize; z-index: 20;
+    transition: background .15s;
+  }
+  .video-resize-handle:hover, .video-resize-handle.dragging {
+    background: rgba(255,255,255,0.85);
+  }
+  .video-placeholder {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 8px; color: #bbb;
+  }
+  .video-placeholder svg { width: 40px; height: 40px; }
+  .file-tag { display: none; }
+  #pose-overlay {
+    position: absolute; bottom: 13px; right: 12px;
+    pointer-events: none;
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    padding: 8px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  #pose-overlay span {
+    display: block;
+    font-size: 14px; font-weight: 700;
+    color: #fff; line-height: 20px;
+    letter-spacing: -0.05px; white-space: nowrap;
+  }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0; height: 42px; flex-shrink: 0;
+  }
+  .panel-header h2 { margin-bottom: 0; }
+  .pick-btn {
+    display: inline-flex; align-items: center;
+    font-size: 12px; color: #000; cursor: pointer;
+    background: #fff; border: 1px solid #e8e8ec; border-radius: 6px;
+    padding: 4px 12px; transition: color .15s, border-color .15s;
+  }
+  .pick-btn:hover { color: #4a90d9; border-color: #4a90d9; }
+
+  /* ── Trajectory stats button & modal ── */
+  #traj-stats-btn {
+    position: absolute; top: 12px; right: 12px; z-index: 3;
+    background: rgba(255,255,255,0.88); border: 1px solid #ddd;
+    border-radius: 6px; width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: background .15s;
+  }
+  #traj-stats-btn:hover { background: #f0f4ff; border-color: #aac; }
+  #traj-stats-modal {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35); z-index: 2000;
+    align-items: center; justify-content: center;
+  }
+  #traj-stats-modal.open { display: flex; }
+  #traj-stats-dialog {
+    background: #fff; border-radius: 14px;
+    padding: 20px 24px; min-width: 320px; max-height: 75vh;
+    overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.22);
+  }
+  #traj-stats-dialog h3 {
+    font-size: 15px; font-weight: 600; margin-bottom: 14px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #traj-stats-close {
+    background: none; border: none; cursor: pointer;
+    font-size: 16px; color: #888; line-height: 1; padding: 0 2px;
+  }
+  #traj-stats-close:hover { color: #333; }
+  #traj-stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #traj-stats-table th {
+    color: #999; font-weight: 500; font-size: 11px;
+    padding: 4px 10px; text-align: right; border-bottom: 2px solid #f0f0f0;
+  }
+  #traj-stats-table th:first-child { text-align: left; }
+  #traj-stats-table td {
+    padding: 7px 10px; text-align: right;
+    border-bottom: 1px solid #f5f5f5; color: #333;
+  }
+  #traj-stats-table td:first-child { text-align: left; font-weight: 500; }
+  #traj-stats-table tr:last-child td { border-bottom: none; }
+
+  /* ── Trajectory legend ── */
+  #traj-legend {
+    position: absolute; bottom: 16px; left: 16px;
+    background: rgba(255,255,255,0.88);
+    border-radius: 6px; padding: 5px 9px;
+    display: flex; flex-direction: column; gap: 4px;
+    z-index: 2; pointer-events: auto;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  }
+  .traj-legend-row {
+    display: flex; align-items: center; gap: 5px;
+    cursor: pointer; user-select: none;
+  }
+  .traj-legend-dot {
+    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; transition: opacity .15s;
+  }
+  .traj-legend-label {
+    font-size: 11px; color: #333; white-space: nowrap; transition: opacity .15s;
+  }
+  .traj-legend-eye {
+    display: flex; align-items: center; margin-left: auto; padding-left: 8px; transition: opacity .15s;
+  }
+  .traj-legend-row.track-hidden .traj-legend-dot,
+  .traj-legend-row.track-hidden .traj-legend-label { opacity: 0.35; }
+  .traj-legend-row .eye-open  { display: block; }
+  .traj-legend-row .eye-closed { display: none; }
+  .traj-legend-row.track-hidden .eye-open  { display: none; }
+  .traj-legend-row.track-hidden .eye-closed { display: block; }
+
+  /* ── Trajectory mode toggle ── */
+  .traj-mode-toggle {
+    display: flex; background: #EEEEF2; border-radius: 6px;
+    padding: 2px; gap: 1px;
+  }
+  .traj-mode-btn {
+    padding: 3px 10px; border-radius: 4px;
+    font-size: 11px; font-weight: 500; color: #888;
+    cursor: pointer; border: none; background: none;
+    transition: all .15s; white-space: nowrap;
+  }
+  .traj-mode-btn.active { background: #fff; color: #222; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+  .pick-btn svg { display: none; }
+
+  /* ── Card wrappers ── */
+  .controls-card {
+    flex-shrink: 0; background: #fff;
+    border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    overflow: hidden;
+  }
+  .values-card {
+    flex-shrink: 0;
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+    gap: 12px;
+  }
+  .charts-card {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+    background: #fff;
+    border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    overflow: hidden;
+  }
+
+  /* ── Controls ── */
+  .controls {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; background: #fff;
+    flex-shrink: 0;
+  }
+  .btn {
+    width: 36px; height: 36px; border-radius: 8px;
+    border: 1px solid #ddd; background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0;
+  }
+  .btn:hover { background: #f5f5f5; }
+  .btn svg { width: 16px; height: 16px; fill: #444; }
+  #timeline {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, #4a90d9 var(--pct,0%), #F2F3F7 var(--pct,0%));
+    outline: none; cursor: pointer;
+  }
+  #timeline::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #4a90d9; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,.2);
+  }
+  #time-label, #sv-time-label { font-size: 13px; color: #555; min-width: 90px; text-align: right; }
+
+  /* ── Charts ── */
+  .charts-scroll {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: auto;
+    background: #fff;
+    padding-bottom: 8px;
+  }
+  /* 捲動內容區，寬度由 JS 動態設定 */
+  .charts-inner { position: relative; display: inline-block; min-width: 100%; }
+
+  .ruler-bar {
+    display: flex; align-items: stretch; flex-shrink: 0;
+    background: #fff; border-bottom: 1px solid #e8e8ec;
+  }
+  .ruler-bar-left {
+    width: 120px; flex-shrink: 0;
+    background: #fff; border-right: 1px solid #e8e8ec;
+  }
+  .ruler-bar-right {
+    flex: 1; overflow-x: scroll; overflow-y: hidden;
+    position: relative; scrollbar-width: none;
+  }
+  .ruler-bar-right::-webkit-scrollbar { display: none; }
+  .ruler-row .chart-label { background: #fff !important; color: #555; }
+  .chart-row {
+    display: flex; align-items: stretch;
+    border-bottom: 1px solid #ebebef;
+  }
+  .chart-label {
+    width: 92px; flex-shrink: 0;
+    position: sticky; left: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 0 4px;
+    font-size: 13px; color: #555; font-weight: 500;
+    background: #fff; border-right: 1px solid #e8e8ec;
+  }
+  .ruler-row .chart-label { background: #fff !important; }
+  .chart-yaxis {
+    width: 28px; flex-shrink: 0;
+    position: sticky; left: 92px; z-index: 20;
+    background: #fff; border-right: 1px solid #e8e8ec;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: space-between;
+    padding: 2px 4px; font-size: 9px; color: #333; font-weight: 500;
+    line-height: 1;
+  }
+  .ruler-row .chart-yaxis { background: #fff !important; }
+  .chart-canvas-wrap { flex: 1; position: relative; min-width: 0; }
+  .speed-expand-btn {
+    background: none; border: none; cursor: pointer; padding: 3px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 3px; transition: background .15s;
+  }
+  .speed-expand-btn:hover { background: rgba(0,0,0,0.07); }
+  .speed-expand-btn svg { display: block; transition: transform .2s ease; }
+  .speed-expand-btn.expanded svg { transform: rotate(180deg); }
+  canvas.chart { display: block; height: 80px; }
+
+  /* 共用游標線：絕對定位在 charts-inner 內，left = 120px + t×PX_PER_SEC */
+  #chart-cursor-line {
+    position: absolute; top: 0; bottom: 0;
+    width: 1.5px; background: rgba(74,144,217,0.75);
+    pointer-events: none; z-index: 10; left: 120px;
+    transform: translateX(0);
+  }
+
+  /* ── Value cards ── */
+  .value-cards { display: contents; }
+  .card {
+    background: #fff; padding: 12px 20px;
+    border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+  }
+  .card-label { font-size: 12px; color: #555; margin-bottom: 4px; }
+  .card-value { font-size: 22px; font-weight: 600; }
+
+  /* ── Lang toggle ── */
+  .lang-toggle {
+    display: flex; background: #EEEEF2; border-radius: 8px;
+    padding: 3px; gap: 2px; margin-left: auto;
+  }
+  .lang-btn {
+    padding: 4px 10px; border-radius: 6px;
+    font-size: 12px; font-weight: 500; color: #888;
+    cursor: pointer; border: none; background: none;
+    transition: all .15s;
+  }
+  .lang-btn.active { background: #fff; color: #222; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+
+  /* ── View tabs ── */
+  .view-tabs {
+    display: flex; background: #EEEEF2; border-radius: 8px;
+    padding: 3px; gap: 2px; margin: 0 auto 0 16px;
+  }
+  .view-tab {
+    padding: 4px 14px; border-radius: 6px;
+    font-size: 12px; font-weight: 500; color: #888;
+    cursor: pointer; border: none; background: none;
+    transition: all .15s;
+  }
+  .view-tab.active { background: #fff; color: #222; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+
+  /* ── Single-view data panel ── */
+  #single-data-panel {
+    display: none; flex-direction: column;
+    grid-column: 2; grid-row: 1;
+    gap: 0; overflow: hidden;
+  }
+  body.single-view #panel-b { display: none; }
+  body.single-view #single-data-panel { display: flex; }
+  body.single-view .controls-card { display: none; }
+  body.single-view .values-card { display: none; }
+
+  /* ── Triple view (default) ── */
+  #panel-traj { display: none; }
+  body.triple-view .video-row { grid-template-columns: 1fr 1fr 1fr; }
+  body.triple-view #panel-traj { display: flex; }
+  body.triple-view #panel-b { display: flex; }
+  body.single-view #panel-traj { display: none; }
+
+  .sv-metrics {
+    flex: 1; display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-rows: 1fr;
+    gap: 12px; overflow: hidden; min-height: 0;
+    margin-bottom: 12px;
+  }
+  #single-data-panel.sv-medium .sv-metrics { grid-template-columns: 1fr 1fr 1fr; }
+  #single-data-panel.sv-compact .sv-metrics { grid-template-columns: repeat(6, 1fr); }
+  .sv-card {
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    padding: 10px 16px; min-height: 0;
+    display: flex; flex-direction: column; justify-content: center;
+    overflow: hidden;
+  }
+  .sv-controls {
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 16px; flex-shrink: 0; height: 50px;
+  }
+  #sv-timeline {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, #4a90d9 var(--pct,0%), #F2F3F7 var(--pct,0%));
+    outline: none; cursor: pointer;
+  }
+  #sv-timeline::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #4a90d9; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,.2);
+  }
+
+  /* ── Trajectory Similarity Panel ── */
+  #traj-similarity {
+    position: absolute; bottom: 16px; right: 16px;
+    background: rgba(255,255,255,0.93);
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px; padding: 8px 11px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.10);
+    z-index: 3; min-width: 162px;
+    display: none;
+    font-size: 11px; color: #333; line-height: 1.7;
+  }
+  .sim-header {
+    font-weight: 600; font-size: 11.5px; color: #222;
+    display: flex; align-items: center; gap: 5px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #eee; padding-bottom: 4px;
+    white-space: nowrap;
+  }
+  .sim-info-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: #dbeafe; color: #2563eb;
+    font-size: 8px; font-weight: 700; cursor: default;
+    flex-shrink: 0; position: relative;
+    font-style: italic; font-family: Georgia, serif;
+  }
+  .sim-info-icon::after {
+    content: attr(data-tip);
+    position: absolute; bottom: 130%; right: 0;
+    background: rgba(30,30,30,0.88); color: #fff;
+    padding: 5px 9px; border-radius: 6px;
+    white-space: nowrap; font-size: 10px; font-style: normal;
+    font-weight: 400; pointer-events: none; z-index: 200;
+    opacity: 0; transition: opacity .15s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .sim-info-icon:hover::after { opacity: 1; }
+  .sim-row { display: flex; justify-content: space-between; gap: 14px; }
+  .sim-label { color: #777; }
+  .sim-value { font-weight: 500; color: #222; }
+
+  /* ── Upload hint ── */
+  #upload-hint {
+    text-align: center; padding: 8px; font-size: 12px; color: #aaa;
+    background: #fffbe6; border-bottom: 1px solid #ffe082;
+  }
+  #upload-hint a { color: #e65100; text-decoration: none; }
+</style>
+</head>
+<body class="triple-view">
+<div id="app">
+
+<div id="upload-hint">
+  Place <b>webcam.mp4</b>, <b>aruco.mp4</b>, and <b>log.csv</b> in the <code>static/</code> folder and refresh. Charts are using demo data.
+</div>
+
+<div id="top-section">
+<header>
+  <h1 data-i18n="app_title">移動機器人數據可視化平台</h1>
+  <div class="view-tabs">
+    <button class="view-tab active" data-view="triple" data-i18n="view_triple">虛實驗證模式</button>
+    <button class="view-tab" data-view="single" data-i18n="view_single">數據分析模式</button>
+  </div>
+  <div class="lang-toggle">
+    <button class="lang-btn active" data-lang="zh">中文</button>
+    <button class="lang-btn" data-lang="en">EN</button>
+  </div>
+</header>
+
+<div class="video-row">
+  <div class="video-panel">
+    <div class="panel-header">
+      <h2 data-i18n="cam_a">機器人移動畫面</h2>
+      <label class="pick-btn" title="Select video file">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 13h8v1.5H8V13zm0 3h8v1.5H8V16zm0-6h3v1.5H8V10z"/></svg>
+        <span data-i18n="pick_video">選取影片</span>
+        <input type="file" accept="video/*,.mov,.mp4" id="file-a" hidden>
+      </label>
+    </div>
+    <div class="video-wrap" id="wrap-a">
+      <div class="video-placeholder" id="placeholder-a">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5">
+          <rect x="2" y="6" width="20" height="14" rx="2"/>
+          <path d="M16 2h-8l-2 4h12z"/>
+        </svg>
+      </div>
+      <div id="pose-overlay">
+        <span id="overlay-loop">Lap — / —</span>
+        <span id="overlay-pos">Position: (—, —)</span>
+        <span id="overlay-dist">Dist. [—]: — m</span>
+      </div>
+      <div id="yaw-indicator" style="
+        position:absolute; top:12px; right:12px;
+        display:flex; flex-direction:column; align-items:center; gap:2px;
+        filter:drop-shadow(0px 4px 2px rgba(0,0,0,0.25));
+        pointer-events:none;
+      ">
+        <canvas id="yaw-canvas" width="48" height="48"></canvas>
+        <span id="yaw-label" style="
+          color:#fff; font-size:14px; font-weight:700;
+          text-shadow:0 4px 4px rgba(0,0,0,0.8);
+          letter-spacing:0.4px; line-height:1.4;
+        ">—</span>
+      </div>
+      <span class="file-tag" id="tag-a">webcam.mp4</span>
+      <div class="video-resize-handle" id="resize-handle-a"></div>
+    </div>
+  </div>
+  <div class="video-panel" id="panel-traj">
+    <div class="panel-header">
+      <h2 data-i18n="cam_traj">軌跡圖</h2>
+      <div class="traj-mode-toggle">
+        <button class="traj-mode-btn active" data-traj-mode="current" data-i18n="traj_current">當前圈</button>
+        <button class="traj-mode-btn" data-traj-mode="robot-all" data-i18n="traj_robot_all">機器人總合圖</button>
+        <button class="traj-mode-btn" data-traj-mode="aruco-all" data-i18n="traj_aruco_all">ArUco總合圖</button>
+      </div>
+    </div>
+    <div class="video-wrap" id="wrap-traj" style="background:#fff;border-radius:8px;">
+      <canvas id="traj-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>
+      <button id="traj-stats-btn" title="各圈統計">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#555" stroke-width="1.5" stroke-linecap="round">
+          <rect x="2" y="8" width="2.5" height="6" rx="0.5"/>
+          <rect x="6.75" y="4" width="2.5" height="10" rx="0.5"/>
+          <rect x="11.5" y="1" width="2.5" height="13" rx="0.5"/>
+        </svg>
+      </button>
+      <div id="traj-legend">
+        <div class="traj-legend-row" data-track="robot">
+          <span class="traj-legend-dot" style="background:rgba(0,111,255,0.9)"></span>
+          <span class="traj-legend-label" data-i18n="traj_robot_track">機器人軌跡</span>
+          <span class="traj-legend-eye">
+            <svg class="eye-open"   viewBox="0 0 18 12" width="16" height="11" fill="none"><path d="M1 6C4.5 1 13.5 1 17 6C13.5 11 4.5 11 1 6Z" stroke="#555" stroke-width="1.4" stroke-linejoin="round"/><circle cx="9" cy="6" r="2.2" fill="#555"/></svg>
+            <svg class="eye-closed" viewBox="0 0 18 12" width="16" height="11" fill="none"><path d="M1 6C4.5 2 13.5 2 17 6" stroke="#aaa" stroke-width="1.4" stroke-linecap="round"/><line x1="5" y1="11" x2="14" y2="1" stroke="#aaa" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </span>
+        </div>
+        <div class="traj-legend-row" data-track="aruco">
+          <span class="traj-legend-dot" style="background:rgba(255,0,4,0.9)"></span>
+          <span class="traj-legend-label" data-i18n="traj_aruco_track">ArUco軌跡</span>
+          <span class="traj-legend-eye">
+            <svg class="eye-open"   viewBox="0 0 18 12" width="16" height="11" fill="none"><path d="M1 6C4.5 1 13.5 1 17 6C13.5 11 4.5 11 1 6Z" stroke="#555" stroke-width="1.4" stroke-linejoin="round"/><circle cx="9" cy="6" r="2.2" fill="#555"/></svg>
+            <svg class="eye-closed" viewBox="0 0 18 12" width="16" height="11" fill="none"><path d="M1 6C4.5 2 13.5 2 17 6" stroke="#aaa" stroke-width="1.4" stroke-linecap="round"/><line x1="5" y1="11" x2="14" y2="1" stroke="#aaa" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </span>
+        </div>
+      </div>
+      <div id="traj-similarity">
+        <div class="sim-header">
+          <span data-i18n="sim_title">軌跡相似度分析</span>
+          <span class="sim-info-icon" data-i18n-tip="sim_tooltip" data-tip="數值越高代表兩條軌跡的運動模式越一致。">i</span>
+        </div>
+        <div class="sim-row"><span class="sim-label" data-i18n="sim_dtw_dist">DTW距離</span><span class="sim-value" id="sim-dtw">—</span></div>
+        <div class="sim-row"><span class="sim-label" data-i18n="sim_ndtw">正規化DTW距離</span><span class="sim-value" id="sim-ndtw" style="font-size:13px;font-weight:600">—</span></div>
+      </div>
+      <div class="video-resize-handle" id="resize-handle-traj"></div>
+    </div>
+  </div>
+  <div class="video-panel" id="panel-b">
+    <div class="panel-header">
+      <h2 data-i18n="cam_b">虛擬實境畫面（ArUco）</h2>
+      <label class="pick-btn" title="Select video file">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 13h8v1.5H8V13zm0 3h8v1.5H8V16zm0-6h3v1.5H8V10z"/></svg>
+        <span data-i18n="pick_video">選取影片</span>
+        <input type="file" accept="video/*,.mov,.mp4" id="file-b" hidden>
+      </label>
+    </div>
+    <div class="video-wrap" id="wrap-b">
+      <div class="video-placeholder" id="placeholder-b">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5">
+          <rect x="2" y="6" width="20" height="14" rx="2"/>
+          <path d="M16 2h-8l-2 4h12z"/>
+        </svg>
+      </div>
+      <span class="file-tag" id="tag-b">aruco.mp4</span>
+      <div class="video-resize-handle" id="resize-handle-b"></div>
+    </div>
+  </div>
+
+  <!-- 單視圖：機器人數據面板 -->
+  <div id="single-data-panel">
+    <div class="panel-header"><h2 data-i18n="robot_data">機器人數據</h2></div>
+    <div class="sv-metrics">
+      <div class="sv-card"><div class="card-label" data-i18n="pwm_left">PWM Left</div><div class="card-value" id="sv-val-pwm-left">—</div></div>
+      <div class="sv-card"><div class="card-label" data-i18n="pwm_right">PWM Right</div><div class="card-value" id="sv-val-pwm-right">—</div></div>
+      <div class="sv-card"><div class="card-label" data-i18n="speed">速度</div><div class="card-value" id="sv-val-v">— m/s</div></div>
+      <div class="sv-card"><div class="card-label" data-i18n="angular">角速度</div><div class="card-value" id="sv-val-w">— rad/s</div></div>
+      <div class="sv-card"><div class="card-label" data-i18n="lwheel">左輪速度</div><div class="card-value" id="sv-val-lspd">— m/s</div></div>
+      <div class="sv-card"><div class="card-label" data-i18n="rwheel">右輪速度</div><div class="card-value" id="sv-val-rspd">— m/s</div></div>
+    </div>
+    <div class="sv-controls">
+      <button class="btn" id="sv-btn-rew" title="Rewind 5s">
+        <svg viewBox="0 0 24 24"><path d="M12 5V2L7 7l5 5V9c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+      </button>
+      <button class="btn" id="sv-btn-play" title="Play / Pause">
+        <svg viewBox="0 0 24 24" id="sv-icon-play"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="btn" id="sv-btn-fwd" title="Forward 5s">
+        <svg viewBox="0 0 24 24"><path d="M12 5v-3l5 5-5 5V9c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/></svg>
+      </button>
+      <input type="range" id="sv-timeline" min="0" max="1000" value="0" step="1">
+      <span id="sv-time-label">0:00 / 0:00</span>
+      <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:8px;">
+        <span data-i18n="offset_webcam">Webcam 偏移(s)</span>
+        <input type="number" id="sv-offset-webcam" value="0" step="0.1"
+          style="width:58px;font-size:12px;border:1px solid #ddd;border-radius:4px;padding:2px 5px;outline:none;">
+      </label>
+    </div>
+  </div>
+</div>
+</div><!-- /top-section -->
+
+<div id="bottom-section">
+<div class="controls-card">
+<div class="controls">
+  <button class="btn" id="btn-rew" title="Rewind 5s">
+    <svg viewBox="0 0 24 24"><path d="M12 5V2L7 7l5 5V9c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+  </button>
+  <button class="btn" id="btn-play" title="Play / Pause">
+    <svg viewBox="0 0 24 24" id="icon-play"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+  <button class="btn" id="btn-fwd" title="Forward 5s">
+    <svg viewBox="0 0 24 24"><path d="M12 5v-3l5 5-5 5V9c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/></svg>
+  </button>
+  <input type="range" id="timeline" min="0" max="1000" value="0" step="1">
+  <span id="time-label">0:00 / 0:00</span>
+  <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:8px;">
+    <span data-i18n="offset_webcam">Webcam 偏移(s)</span>
+    <input type="number" id="offset-webcam" value="0" step="0.1"
+      style="width:58px;font-size:12px;border:1px solid #ddd;border-radius:4px;padding:2px 5px;outline:none;">
+  </label>
+  <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:4px;flex-shrink:0;">
+    <span data-i18n="offset_aruco">ArUco 偏移(s)</span>
+    <input type="number" id="offset-aruco" value="0" step="0.1"
+      style="width:58px;font-size:12px;border:1px solid #ddd;border-radius:4px;padding:2px 5px;outline:none;">
+  </label>
+</div>
+</div><!-- /controls-card -->
+
+<div class="values-card">
+<div class="value-cards">
+  <div class="card">
+    <div class="card-label" data-i18n="pwm_left">PWM Left</div>
+    <div class="card-value" id="val-pwm-left">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label" data-i18n="pwm_right">PWM Right</div>
+    <div class="card-value" id="val-pwm-right">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label" data-i18n="speed">速度</div>
+    <div class="card-value" id="val-v">— m/s</div>
+  </div>
+  <div class="card">
+    <div class="card-label" data-i18n="lwheel">左輪速度</div>
+    <div class="card-value" id="val-lspd">— m/s</div>
+  </div>
+  <div class="card">
+    <div class="card-label" data-i18n="rwheel">右輪速度</div>
+    <div class="card-value" id="val-rspd">— m/s</div>
+  </div>
+  <div class="card">
+    <div class="card-label" data-i18n="angular">角速度</div>
+    <div class="card-value" id="val-w">— rad/s</div>
+  </div>
+</div>
+</div><!-- /values-card -->
+
+<div class="charts-card">
+<div class="ruler-bar">
+  <div class="ruler-bar-left"></div>
+  <div class="ruler-bar-right" id="ruler-right-outer">
+    <canvas id="ruler-canvas" style="display:block;height:40px;cursor:col-resize;"></canvas>
+    <div id="ruler-playhead" style="
+      position:absolute; top:0; bottom:0; left:0;
+      width:2px; background:#4a90d9;
+      pointer-events:none; z-index:11;
+    ">
+      <div style="
+        position:absolute; top:0; left:-5px;
+        width:0; height:0;
+        border-left:6px solid transparent;
+        border-right:6px solid transparent;
+        border-top:9px solid #4a90d9;
+      "></div>
+    </div>
+  </div>
+</div>
+<div class="charts-scroll" id="charts-scroll">
+  <div class="charts-inner" id="charts-inner">
+    <div id="chart-cursor-line"></div>
+    <div class="chart-row">
+      <div class="chart-label" data-i18n="pwm_left">PWM Left</div>
+      <div class="chart-yaxis" id="yaxis-pwm-left">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="chart" id="chart-pwm-left"></canvas>
+      </div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-label" data-i18n="pwm_right">PWM Right</div>
+      <div class="chart-yaxis" id="yaxis-pwm-right">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="chart" id="chart-pwm-right"></canvas>
+      </div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-label" style="flex-direction:row;align-items:center;gap:3px;">
+        <span data-i18n="speed">速度</span>
+        <button class="speed-expand-btn" id="btn-speed-expand" title="Expand wheel speeds">
+          <svg viewBox="0 0 10 6" width="10" height="6" fill="none">
+            <path d="M1 1l4 4 4-4" stroke="#555" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="chart-yaxis" id="yaxis-v">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="chart" id="chart-v"></canvas>
+      </div>
+    </div>
+    <div class="chart-row" id="row-lspd" style="display:none">
+      <div class="chart-label" data-i18n="lwheel">左輪速度</div>
+      <div class="chart-yaxis" id="yaxis-lspd">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="chart" id="chart-lspd"></canvas>
+      </div>
+    </div>
+    <div class="chart-row" id="row-rspd" style="display:none">
+      <div class="chart-label" data-i18n="rwheel">右輪速度</div>
+      <div class="chart-yaxis" id="yaxis-rspd">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="chart" id="chart-rspd"></canvas>
+      </div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-label" data-i18n="angular">角速度</div>
+      <div class="chart-yaxis" id="yaxis-w">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="chart" id="chart-w"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /charts-card -->
+</div><!-- /bottom-section -->
+<!-- Lap stats modal -->
+<div id="traj-stats-modal">
+  <div id="traj-stats-dialog">
+    <h3>
+      <span id="traj-stats-title">各圈統計</span>
+      <button id="traj-stats-close">✕</button>
+    </h3>
+    <table id="traj-stats-table">
+      <thead>
+        <tr>
+          <th id="traj-stats-th-lap">圈數</th>
+          <th id="traj-stats-th-time">時間 (s)</th>
+          <th id="traj-stats-th-dist">距離 (m)</th>
+          <th id="traj-stats-th-sim">DTW相似度</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<script>
+// ── Resize handle ────────────────────────────────────────────────────────────
+const topSection    = document.getElementById('top-section');
+const MIN_TOP_H = 80, MIN_BOT_H = 120;
+
+topSection.style.height = '388px';
+
+let resizeDragging = false, resizeStartY = 0, resizeStartH = 0;
+let activeResizeHandle = null;
+
+function startResize(e, handle) {
+  resizeDragging = true;
+  resizeStartY = e.clientY;
+  resizeStartH = topSection.getBoundingClientRect().height;
+  activeResizeHandle = handle;
+  handle.classList.add('dragging');
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'row-resize';
+}
+
+['resize-handle-a', 'resize-handle-traj', 'resize-handle-b'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('mousedown', e => startResize(e, el));
+});
+
+document.addEventListener('mousemove', e => {
+  if (!resizeDragging) return;
+  const appH = document.getElementById('app').getBoundingClientRect().height;
+  const newH = Math.min(appH - MIN_BOT_H, Math.max(MIN_TOP_H, resizeStartH + (e.clientY - resizeStartY)));
+  topSection.style.height = newH + 'px';
+  updateSvLayout();
+});
+
+document.addEventListener('mouseup', () => {
+  if (!resizeDragging) return;
+  resizeDragging = false;
+  if (activeResizeHandle) { activeResizeHandle.classList.remove('dragging'); activeResizeHandle = null; }
+  document.body.style.userSelect = '';
+  document.body.style.cursor = '';
+});
+
+// ── State ──────────────────────────────────────────────────────────────────
+let csvData = [];
+let videoDuration = 0;
+let isSeeking = false;
+let pxPerSec     = 10;   // 動態縮放，每秒幾 px
+const LABEL_W    = 120;  // chart-label(92) + yaxis(28)，需與 CSS 一致
+const MIN_PX_PER_SEC = 2;
+const MAX_PX_PER_SEC = 400;  // 400px/s → 0.05s 間格 = 20px，清晰可見
+const COLORS = { pwm_left: '#3B82F6', pwm_right: '#60A5FA', v: '#10B981', w: '#F59E0B', lspd: '#14B8A6', rspd: '#2DD4BF' };
+
+// ── Video setup ─────────────────────────────────────────────────────────────
+const vidA = document.createElement('video');
+const vidB = document.createElement('video');
+[vidA, vidB].forEach(v => {
+  v.preload = 'metadata';
+  v.playsInline = true;
+  v.style.width = '100%';
+  v.style.height = '100%';
+  v.style.objectFit = 'cover';
+  v.style.objectPosition = 'center';
+});
+
+function loadLocalFile(file, videoEl, wrapId, placeholderId, tagId) {
+  const url = URL.createObjectURL(file);
+  videoEl.src = url;
+  const wrap = document.getElementById(wrapId);
+  if (!wrap.contains(videoEl)) {
+    wrap.insertBefore(videoEl, wrap.firstChild);
+  }
+  document.getElementById(placeholderId).style.display = 'none';
+  document.getElementById(tagId).textContent = file.name;
+  document.getElementById('upload-hint').style.display = 'none';
+  videoEl.load();
+}
+
+document.getElementById('file-a').addEventListener('change', e => {
+  if (e.target.files[0]) loadLocalFile(e.target.files[0], vidA, 'wrap-a', 'placeholder-a', 'tag-a');
+});
+document.getElementById('file-b').addEventListener('change', e => {
+  if (e.target.files[0]) loadLocalFile(e.target.files[0], vidB, 'wrap-b', 'placeholder-b', 'tag-b');
+});
+
+function tryLoadVideo(baseName, videoEl, wrapId, placeholderId, hideHint) {
+  const exts = ['.mp4', '.mov'];
+  const stem = baseName.replace(/\.[^.]+$/, '');
+  let tried = 0;
+  function attempt(i) {
+    if (i >= exts.length) return;
+    const src = '/video/' + stem + exts[i];
+    fetch(src, { method: 'HEAD' }).then(r => {
+      if (r.ok) {
+        videoEl.src = src;
+        document.getElementById(wrapId).insertBefore(videoEl, document.getElementById(wrapId).firstChild);
+        document.getElementById(placeholderId).style.display = 'none';
+        if (hideHint) document.getElementById('upload-hint').style.display = 'none';
+      } else { attempt(i + 1); }
+    }).catch(() => attempt(i + 1));
+  }
+  attempt(0);
+}
+
+function tryLoadVideos() {
+  tryLoadVideo('webcam', vidA, 'wrap-a', 'placeholder-a', true);
+  tryLoadVideo('aruco',  vidB, 'wrap-b', 'placeholder-b', false);
+}
+tryLoadVideos();
+
+vidA.addEventListener('loadedmetadata', () => {
+  videoDuration = vidA.duration;
+  updateTimeLabel(0);
+});
+
+// ── Controls ────────────────────────────────────────────────────────────────
+let playing = false;
+
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60).toString().padStart(2, '0');
+  return `${m}:${sec}`;
+}
+
+function updateTimeLabel(t) {
+  const dur = videoDuration || (csvData.length ? csvData[csvData.length - 1].time : 0);
+  const label = `${formatTime(t)} / ${formatTime(dur)}`;
+  document.getElementById('time-label').textContent = label;
+  document.getElementById('sv-time-label').textContent = label;
+}
+
+function setPlayIcon(isPlaying) {
+  const path = isPlaying ? '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>' : '<path d="M8 5v14l11-7z"/>';
+  document.getElementById('icon-play').innerHTML = path;
+  document.getElementById('sv-icon-play').innerHTML = path;
+}
+
+document.getElementById('btn-play').addEventListener('click', () => {
+  if (!vidA.src && !vidB.src) return;
+  playing = !playing;
+  if (playing) {
+    vidA.play();
+    if (vidB.src) {
+      vidB.currentTime = Math.max(0, vidA.currentTime + arucoOffset);
+      vidB.play();
+    }
+  } else { vidA.pause(); vidB.pause(); }
+  setPlayIcon(playing);
+});
+
+document.getElementById('btn-rew').addEventListener('click', () => seek(-5));
+document.getElementById('btn-fwd').addEventListener('click', () => seek(5));
+
+function seek(delta) {
+  const t = Math.max(0, (vidA.currentTime || 0) + delta);
+  scrubTo(t);
+}
+
+function scrubTo(t) {
+  vidA.currentTime = t;
+  vidB.currentTime = Math.max(0, t + arucoOffset);
+  updateTimeline(t);
+  drawCursors(t);
+  updateCards(t);
+  updateOverlay(t);
+}
+
+const timeline = document.getElementById('timeline');
+timeline.addEventListener('input', () => {
+  isSeeking = true;
+  const dur = videoDuration || (csvData.length ? csvData[csvData.length - 1].time : 1);
+  const t = (timeline.value / 1000) * dur;
+  scrubTo(t);
+});
+timeline.addEventListener('change', () => { isSeeking = false; });
+
+function updateTimeline(t) {
+  const dur = videoDuration || (csvData.length ? csvData[csvData.length - 1].time : 1);
+  const pct = dur ? (t / dur) * 100 : 0;
+  const val = Math.round((t / dur) * 1000);
+  timeline.value = val;
+  timeline.style.setProperty('--pct', pct + '%');
+  const svTl = document.getElementById('sv-timeline');
+  svTl.value = val;
+  svTl.style.setProperty('--pct', pct + '%');
+  updateTimeLabel(t);
+}
+
+// Poll video time
+setInterval(() => {
+  if (!isSeeking && vidA.src) {
+    const t = vidA.currentTime;
+    if (vidB.src && playing && Math.abs(vidB.currentTime - (t + arucoOffset)) > 0.2) {
+      vidB.currentTime = Math.max(0, t + arucoOffset);
+    }
+    updateTimeline(t);
+    drawCursors(t);
+    updateCards(t);
+    updateOverlay(t);
+    if (vidA.ended) { playing = false; setPlayIcon(false); }
+  }
+}, 100);
+
+// ── CSV / Charts ─────────────────────────────────────────────────────────────
+fetch('/api/csv').then(r => r.json()).then(data => {
+  csvData = data;
+  redrawAll(0);
+  updateCards(0);
+});
+
+const chartCanvases = {
+  'pwm-left':  document.getElementById('chart-pwm-left'),
+  'pwm-right': document.getElementById('chart-pwm-right'),
+  v:           document.getElementById('chart-v'),
+  w:           document.getElementById('chart-w'),
+  lspd:        document.getElementById('chart-lspd'),
+  rspd:        document.getElementById('chart-rspd'),
+};
+
+function getChartPx() {
+  const dur = videoDuration || (csvData.length ? csvData[csvData.length - 1].time : 0);
+  return Math.max(dur * pxPerSec, 100);
+}
+
+function resizeCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = getChartPx();
+  canvas.width  = W * dpr;
+  canvas.height = 80 * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = '80px';
+  canvas.getContext('2d').scale(dpr, dpr);
+}
+
+function drawLine(ctx, data, keyFn, toX, toY) {
+  ctx.beginPath();
+  data.forEach((d, i) => {
+    const x = toX(d.time), y = toY(keyFn(d));
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function drawCursorLine(ctx, cx, H) {
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(74,144,217,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.moveTo(cx, 0);
+  ctx.lineTo(cx, H);
+  ctx.stroke();
+}
+
+function timeToX(t) {
+  return t * pxPerSec;   // 直接換算，無 pad，完全精確
+}
+
+// LOD downsampling: returns [{time, v}] averaged into buckets when zoomed out
+function resampleForDisplay(dataKey, pxThreshold = 1.5) {
+  if (csvData.length < 2) return csvData.map(d => ({ time: d.time, v: d[dataKey] }));
+  const sampleInterval = (csvData[csvData.length - 1].time - csvData[0].time) / (csvData.length - 1);
+  const pxPerSample = pxPerSec * sampleInterval;
+  if (pxPerSample >= pxThreshold) {
+    return csvData.map(d => ({ time: d.time, v: d[dataKey] }));
+  }
+  const W = getChartPx();
+  const buckets = Math.max(10, Math.floor(W / pxThreshold));
+  const step = csvData.length / buckets;
+  const result = [];
+  for (let i = 0; i < buckets; i++) {
+    const s = Math.floor(i * step);
+    const e = Math.min(Math.floor((i + 1) * step), csvData.length);
+    if (s >= e) continue;
+    let sumT = 0, sumV = 0;
+    for (let j = s; j < e; j++) { sumT += csvData[j].time; sumV += csvData[j][dataKey]; }
+    result.push({ time: sumT / (e - s), v: sumV / (e - s) });
+  }
+  return result;
+}
+
+function drawChartSingle(canvasKey, dataKey, color, area = false) {
+  const canvas = chartCanvases[canvasKey];
+  resizeCanvas(canvas);
+  const ctx = canvas.getContext('2d');
+  const W = getChartPx(), H = 80;
+  ctx.clearRect(0, 0, W, H);
+  if (!csvData.length) return;
+
+  // for scale always use full data range
+  const vals = csvData.map(d => d[dataKey]);
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const posMax = Math.max(maxV, 1e-6);
+  const negMin = Math.min(minV, -1e-6);
+  const pad = 6;
+  const zero = H / 2;
+  const toY = v => v >= 0
+    ? zero - (v / posMax) * (zero - pad)
+    : zero + (v / negMin) * (zero - pad);
+
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 0.5;
+  ctx.moveTo(0, zero); ctx.lineTo(W, zero);
+  ctx.stroke();
+
+  // use LOD data for drawing (downsample when zoomed out)
+  const pts = resampleForDisplay(dataKey);
+
+  if (area) {
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const x = timeToX(p.time), y = toY(p.v);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.lineTo(timeToX(pts[pts.length - 1].time), zero);
+    ctx.lineTo(timeToX(pts[0].time), zero);
+    ctx.closePath();
+    ctx.fillStyle = color + 'CC';
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = area ? color + 'CC' : color; ctx.lineWidth = area ? 1.5 : 1.8; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    const x = timeToX(p.time), y = toY(p.v);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  const yaxisEl = document.getElementById('yaxis-' + canvasKey);
+  if (yaxisEl) {
+    const spans = yaxisEl.querySelectorAll('span');
+    spans[0].textContent = maxV.toFixed(1);
+    spans[1].textContent = '0';
+    spans[2].textContent = minV.toFixed(1);
+  }
+}
+
+function drawChartDual(canvasKey, keyA, keyB, colorA, colorB) {
+  const canvas = chartCanvases[canvasKey];
+  resizeCanvas(canvas);
+  const ctx = canvas.getContext('2d');
+  const W = getChartPx(), H = 80;
+  ctx.clearRect(0, 0, W, H);
+  if (!csvData.length) return;
+
+  const allVals = csvData.flatMap(d => [d[keyA], d[keyB]]);
+  const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+  const posMax = Math.max(maxV, 1e-6);
+  const negMin = Math.min(minV, -1e-6);
+  const pad = 6;
+  const toY = v => v >= 0
+    ? (H / 2) - (v / posMax) * (H / 2 - pad)
+    : (H / 2) + (v / negMin) * (H / 2 - pad);
+
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 0.5;
+  ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2);
+  ctx.stroke();
+
+  [keyA, keyB].forEach((key, ki) => {
+    ctx.strokeStyle = ki === 0 ? colorA : colorB;
+    ctx.lineWidth = 1.8; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    csvData.forEach((d, i) => {
+      const x = timeToX(d.time), y = toY(d[key]);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  });
+
+  const yaxisEl = document.getElementById('yaxis-' + canvasKey);
+  if (yaxisEl) {
+    const spans = yaxisEl.querySelectorAll('span');
+    spans[0].textContent = maxV.toFixed(1);
+    spans[1].textContent = '0';
+    spans[2].textContent = minV.toFixed(1);
+  }
+}
+
+const cursorLineEl    = document.getElementById('chart-cursor-line');
+const rulerPlayhead   = document.getElementById('ruler-playhead');
+const chartsScroll    = document.getElementById('charts-scroll');
+const chartsInner     = document.getElementById('charts-inner');
+const rulerRightOuter = document.getElementById('ruler-right-outer');
+
+// 時間軸與圖表橫向捲動同步
+chartsScroll.addEventListener('scroll', () => {
+  rulerRightOuter.scrollLeft = chartsScroll.scrollLeft;
+}, { passive: true });
+rulerRightOuter.addEventListener('scroll', () => {
+  chartsScroll.scrollLeft = rulerRightOuter.scrollLeft;
+}, { passive: true });
+
+function moveCursorDivs(t) {
+  const x = timeToX(t);   // px within canvas (= within chart-canvas-wrap)
+  // cursor line: LABEL_W + x
+  cursorLineEl.style.transform = `translateX(${LABEL_W + x}px)`;
+  cursorLineEl.style.left = '0';
+  // ruler playhead: x within ruler-wrap (no label offset)
+  rulerPlayhead.style.left = x + 'px';
+
+  // 不自動捲動，讓使用者自由瀏覽時間軸
+}
+
+let speedExpanded = false;
+
+document.getElementById('btn-speed-expand').addEventListener('click', () => {
+  speedExpanded = !speedExpanded;
+  document.getElementById('row-lspd').style.display = speedExpanded ? 'flex' : 'none';
+  document.getElementById('row-rspd').style.display = speedExpanded ? 'flex' : 'none';
+  document.getElementById('btn-speed-expand').classList.toggle('expanded', speedExpanded);
+  if (speedExpanded) {
+    drawChartSingle('lspd', 'left_speed', COLORS.lspd);
+    drawChartSingle('rspd', 'right_speed', COLORS.rspd);
+    moveCursorDivs(vidA.currentTime || 0);
+  }
+});
+
+function drawAllCharts(t) {
+  drawChartSingle('pwm-left',  'pwm_left',  COLORS.pwm_left);
+  drawChartSingle('pwm-right', 'pwm_right', COLORS.pwm_right);
+  drawChartSingle('v', 'real_v', COLORS.v);
+  if (speedExpanded) {
+    drawChartSingle('lspd', 'left_speed', COLORS.lspd);
+    drawChartSingle('rspd', 'right_speed', COLORS.rspd);
+  }
+  drawChartSingle('w', 'real_w', COLORS.w);
+}
+
+function drawCursors(t) { drawAllCharts(t); moveCursorDivs(t); drawRuler(t); }
+
+function lerpRow(t) {
+  let idx = csvData.findIndex(d => d.time >= t);
+  if (idx === -1) return csvData[csvData.length - 1];
+  if (idx === 0)  return csvData[0];
+  const a = csvData[idx - 1], b = csvData[idx];
+  const frac = b.time === a.time ? 0 : (t - a.time) / (b.time - a.time);
+  const out = {};
+  for (const k of Object.keys(a)) {
+    if (k === 'loop' || k === 'waypoint' || k === 'strategy') {
+      out[k] = b[k] ?? a[k];           // 非連續欄位：直接取後一筆
+    } else {
+      const av = a[k], bv = b[k];
+      out[k] = (typeof av === 'number' && typeof bv === 'number')
+        ? av + (bv - av) * frac
+        : (bv ?? av);
+    }
+  }
+  return out;
+}
+
+function updateCards(t) {
+  if (!csvData.length) return;
+  const d = lerpRow(t);
+  const pwmL = (d.pwm_left * 100).toFixed(1) + '%';
+  const pwmR = (d.pwm_right * 100).toFixed(1) + '%';
+  const vVal = d.real_v.toFixed(3) + ' m/s';
+  const lspd = d.left_speed.toFixed(3) + ' m/s';
+  const rspd = d.right_speed.toFixed(3) + ' m/s';
+  const wVal = d.real_w.toFixed(3) + ' rad/s';
+  document.getElementById('val-pwm-left').textContent  = pwmL;
+  document.getElementById('val-pwm-right').textContent = pwmR;
+  document.getElementById('val-v').textContent    = vVal;
+  document.getElementById('val-lspd').textContent = lspd;
+  document.getElementById('val-rspd').textContent = rspd;
+  document.getElementById('val-w').textContent    = wVal;
+  document.getElementById('sv-val-pwm-left').textContent  = pwmL;
+  document.getElementById('sv-val-pwm-right').textContent = pwmR;
+  document.getElementById('sv-val-v').textContent    = vVal;
+  document.getElementById('sv-val-lspd').textContent = lspd;
+  document.getElementById('sv-val-rspd').textContent = rspd;
+  document.getElementById('sv-val-w').textContent    = wVal;
+}
+
+window.addEventListener('resize', () => {
+  redrawAll(vidA.currentTime || 0);
+  const _p = lastPoseForTraj;
+  drawTrajCanvas(lastTrajLap >= 0 ? lastTrajLap : 0, _p?.x, _p?.y, _p?.yaw);
+});
+
+// ── Pinch / Ctrl+Scroll 縮放 ─────────────────────────────────────────────────
+function redrawAll(t) {
+  const totalPx = LABEL_W + getChartPx();
+  chartsInner.style.width = totalPx + 'px';
+  drawAllCharts(t);
+  drawRuler(t);
+  moveCursorDivs(t);
+}
+
+function safeMaxPxPerSec() {
+  const dur = videoDuration || (csvData.length ? csvData[csvData.length - 1].time : 10);
+  const dpr = window.devicePixelRatio || 1;
+  return Math.min(MAX_PX_PER_SEC, Math.floor(30000 / (dur * dpr)));
+}
+
+chartsScroll.addEventListener('wheel', e => {
+  if (!e.ctrlKey) return;   // 只攔截 pinch / Ctrl+滾輪
+  e.preventDefault();
+
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  const newScale = Math.min(safeMaxPxPerSec(), Math.max(MIN_PX_PER_SEC, pxPerSec * factor));
+  if (newScale === pxPerSec) return;
+
+  // 以滑鼠在 charts-inner 內的時間點為縮放中心
+  const mouseXInScroll = e.clientX - chartsScroll.getBoundingClientRect().left;
+  const timeAtMouse = (chartsScroll.scrollLeft + mouseXInScroll - LABEL_W) / pxPerSec;
+
+  pxPerSec = newScale;
+
+  // 縮放後保持 timeAtMouse 位置不動
+  const newScrollLeft = timeAtMouse * pxPerSec + LABEL_W - mouseXInScroll;
+  redrawAll(vidA.currentTime || 0);
+  chartsScroll.scrollLeft = Math.max(0, newScrollLeft);
+}, { passive: false });
+
+// ── Timeline Ruler ────────────────────────────────────────────────────────────
+const rulerCanvas = document.getElementById('ruler-canvas');
+
+function drawRuler(cursorTime) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = getChartPx(), H = 40;
+  rulerCanvas.width  = W * dpr;
+  rulerCanvas.height = H * dpr;
+  rulerCanvas.style.width  = W + 'px';
+  rulerCanvas.style.height = H + 'px';
+  const ctx = rulerCanvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const dur = videoDuration || (csvData.length ? csvData[csvData.length - 1].time : 1);
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+
+  // 用 PX_PER_SEC 換算 major tick：目標每 ~80px 一個
+  const secPerMajor = Math.ceil(80 / pxPerSec / 5) * 5 || 10;
+  const niceIntervals = [1,2,5,10,15,30,60,120,300];
+  const majorSec = niceIntervals.find(v => v >= secPerMajor) || 300;
+  const minorSec = majorSec / 5;
+
+  const toX = t => timeToX(t);
+
+  // minor ticks
+  ctx.strokeStyle = '#999';
+  ctx.lineWidth = 1;
+  for (let t = 0; t <= dur; t += minorSec) {
+    const x = toX(t);
+    ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x, H - 6); ctx.stroke();
+  }
+
+  // major ticks + labels
+  ctx.strokeStyle = '#333';
+  ctx.fillStyle = '#222';
+  ctx.font = `${10 * dpr / dpr}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 1;
+  for (let t = 0; t <= dur; t += majorSec) {
+    const x = toX(t);
+    ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x, H - 12); ctx.stroke();
+    const m = Math.floor(t / 60).toString().padStart(2, '0');
+    const s = Math.floor(t % 60).toString().padStart(2, '0');
+    ctx.fillText(`${m}:${s}`, x, 14);
+  }
+
+  // 中間目標點 location-pin icon
+  waypointTimes.forEach(t => {
+    const px   = toX(t);
+    const tipY = H - 1;     // 針尖貼底
+    const pinH = 11;        // 整體高度
+    const r    = pinH * 0.38;
+    const cy   = tipY - pinH + r;
+    ctx.fillStyle = '#4a90d9';
+    ctx.beginPath();
+    ctx.moveTo(px, tipY);
+    ctx.quadraticCurveTo(px - r * 0.9, tipY - pinH * 0.45, px - r, cy);
+    ctx.arc(px, cy, r, Math.PI, 0);
+    ctx.quadraticCurveTo(px + r * 0.9, tipY - pinH * 0.45, px, tipY);
+    ctx.closePath();
+    ctx.fill();
+    // 內圈白點
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(px, cy, r * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // 每圈旗子（第1圈固定在 t=0，其餘在圈尾）
+  const flagPoints = [{ t: 0, lap: 1 },
+    ...lapTimes.map((t, i) => ({ t, lap: i + 2 }))];
+
+  flagPoints.forEach(({ t: ft, lap }) => {
+    const x      = toX(ft);
+    const poleTop = H - 18;
+    const flagH   = 9;
+    const flagW   = 10;
+    const midY    = poleTop + flagH / 2;
+
+    // 底色（蓋掉刻度）
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x - 1, poleTop, flagW + 8, H - poleTop);
+
+    // 旗桿
+    ctx.beginPath();
+    ctx.strokeStyle = '#e53935'; ctx.lineWidth = 1.5;
+    ctx.moveTo(x, poleTop); ctx.lineTo(x, H); ctx.stroke();
+
+    // 旗面（右指三角形，較小）
+    ctx.beginPath();
+    ctx.moveTo(x, poleTop);
+    ctx.lineTo(x + flagW, midY);
+    ctx.lineTo(x, poleTop + flagH);
+    ctx.closePath();
+    ctx.fillStyle = '#e53935'; ctx.fill();
+
+    // 數字（底部右側）
+    ctx.fillStyle = '#e53935';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(String(lap), x + 4, H - 1);
+  });
+  ctx.textAlign = 'center';
+
+  // playhead 已改由 CSS div (#ruler-playhead) 處理，不在 canvas 畫
+}
+
+
+// ruler drag
+let rulerDragging = false;
+rulerCanvas.addEventListener('mousedown', e => {
+  rulerDragging = true; isSeeking = true;
+  scrubTo(rulerTimeFromEvent(e));
+});
+rulerCanvas.addEventListener('mousemove', e => {
+  if (!rulerDragging) return;
+  scrubTo(rulerTimeFromEvent(e));
+});
+document.addEventListener('mouseup', () => {
+  if (rulerDragging) { rulerDragging = false; isSeeking = false; }
+});
+
+function rulerTimeFromEvent(e) {
+  const rulerRect = rulerCanvas.getBoundingClientRect();
+  const x = e.clientX - rulerRect.left;
+  const dur = videoDuration || (csvData.length ? csvData[csvData.length - 1].time : 1);
+  return Math.max(0, Math.min(dur, x / pxPerSec));
+}
+
+// initial draw
+let lapTimes = [];       // 每圈完成的時間點（需在 drawRuler 之前宣告）
+let waypointTimes = []; // 中間目標點時間（非最後一個）
+drawRuler(0);
+
+
+// ── Pose overlay ────────────────────────────────────────────────────────────
+let poseData = [];
+let totalLoops = 1;
+let webcamOffset = 0;  // pose 查詢偏移：正值 = pose 等影片追上
+let arucoOffset  = 0;  // ArUco 相對 webcam 的偏移
+
+document.getElementById('offset-webcam').addEventListener('input', e => {
+  webcamOffset = parseFloat(e.target.value) || 0;
+  updateOverlay(vidA.currentTime || 0);
+});
+document.getElementById('offset-aruco').addEventListener('input', e => {
+  arucoOffset = parseFloat(e.target.value) || 0;
+  if (vidB.src) vidB.currentTime = Math.max(0, (vidA.currentTime || 0) + arucoOffset);
+});
+
+fetch('/api/pose').then(r => r.json()).then(data => {
+  poseData = data;
+  if (data.length > 0) totalLoops = data[data.length - 1].loop + 1;
+  lapTimes = [];
+  waypointTimes = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i].loop > data[i - 1].loop) {
+      lapTimes.push(data[i - 1].time);
+    } else if (data[i].waypoint !== data[i - 1].waypoint) {
+      waypointTimes.push(data[i - 1].time);
+    }
+  }
+  buildTrajWaypoints(data);
+  lastTrajLap = 0;
+  drawTrajCanvas(0);
+  drawRuler(vidA.currentTime || 0);
+});
+
+function lerpPose(t) {
+  if (!poseData.length) return null;
+  let idx = poseData.findIndex(d => d.time >= t);
+  if (idx === -1) return poseData[poseData.length - 1];
+  if (idx === 0)  return poseData[0];
+  const a = poseData[idx - 1], b = poseData[idx];
+  const frac = b.time === a.time ? 0 : (t - a.time) / (b.time - a.time);
+  const lerp = (ka) => a[ka] + (b[ka] - a[ka]) * frac;
+  return {
+    x: lerp('x'), y: lerp('y'), yaw: lerp('yaw'),
+    target_x: lerp('target_x'), target_y: lerp('target_y'),
+    distance: lerp('distance'),
+    waypoint: b.waypoint ?? a.waypoint,
+    loop:     b.loop ?? a.loop,
+    strategy: b.strategy ?? a.strategy,
+  };
+}
+
+function fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }
+
+function drawYawIndicator(yawDeg) {
+  const canvas = document.getElementById('yaw-canvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const SIZE = 48;
+  canvas.width  = SIZE * dpr;
+  canvas.height = SIZE * dpr;
+  canvas.style.width  = SIZE + 'px';
+  canvas.style.height = SIZE + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const cx = SIZE / 2, cy = SIZE / 2, R = 22;
+  ctx.clearRect(0, 0, SIZE, SIZE);
+
+  // 白色背景圓
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 0.75;
+  ctx.stroke();
+
+  // 刻度線與標籤（0上 90右 180下 -90左）
+  const marks = [
+    { deg: 0,    label: '0',    ax: 0,  ay: -1, alignH: 'center', alignV: 'bottom' },
+    { deg: 90,   label: '90',   ax: 1,  ay:  0, alignH: 'left',   alignV: 'middle' },
+    { deg: 180,  label: '180',  ax: 0,  ay:  1, alignH: 'center', alignV: 'top'    },
+    { deg: -90,  label: '-90',  ax: -1, ay:  0, alignH: 'right',  alignV: 'middle' },
+  ];
+  marks.forEach(({ deg, label, ax, ay, alignH, alignV }) => {
+    const rad = deg * Math.PI / 180;
+    const cosA = Math.cos(rad - Math.PI / 2);
+    const sinA = Math.sin(rad - Math.PI / 2);
+    // 刻度線
+    ctx.beginPath();
+    ctx.moveTo(cx + (R - 4) * cosA, cy + (R - 4) * sinA);
+    ctx.lineTo(cx + R * cosA, cy + R * sinA);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  // 指針（yawDeg=0 朝上，順時針為正）
+  const rad = yawDeg * Math.PI / 180;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rad);
+
+  // 前端箭頭（深色）
+  ctx.beginPath();
+  ctx.moveTo(0, -(R - 3));
+  ctx.lineTo(3.5, 2);
+  ctx.lineTo(-3.5, 2);
+  ctx.closePath();
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fill();
+
+  // 尾端（淺色）
+  ctx.beginPath();
+  ctx.moveTo(0, R - 5);
+  ctx.lineTo(2.5, 2);
+  ctx.lineTo(-2.5, 2);
+  ctx.closePath();
+  ctx.fillStyle = '#bbb';
+  ctx.fill();
+
+  ctx.restore();
+
+  // 中心圓點
+  ctx.beginPath();
+  ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#333';
+  ctx.fill();
+}
+
+function toDisplayYaw(yaw) {
+  let d = yaw - 180;
+  while (d > 180)  d -= 360;
+  while (d < -180) d += 360;
+  return d;
+}
+
+function updateOverlay(t) {
+  const p = lerpPose(t + webcamOffset);
+  if (!p) return;
+  const T = TRANSLATIONS[currentLang];
+  document.getElementById('overlay-loop').textContent =
+    T.overlay_loop(p.loop + 1, totalLoops);
+  document.getElementById('overlay-pos').textContent =
+    T.overlay_pos(fmt(p.x), fmt(p.y));
+  document.getElementById('overlay-dist').textContent =
+    T.overlay_dist(p.waypoint, p.distance != null ? p.distance.toFixed(2) : '—');
+  const displayYaw = toDisplayYaw(p.yaw);
+  drawYawIndicator(displayYaw);
+  document.getElementById('yaw-label').textContent = displayYaw.toFixed(1) + '°';
+  lastPoseForTraj = p;
+  if (p.loop !== lastTrajLap) lastTrajLap = p.loop;
+  drawTrajCanvas(p.loop, p.x, p.y, p.yaw);
+}
+
+// updateOverlay is called by the poll loop below and by scrubTo via drawCursors chain
+
+// ── Chart drag-to-seek ───────────────────────────────────────────────────────
+let chartDragging = false;
+
+function chartTimeFromEvent(e) {
+  const canvas = e.currentTarget;
+  const rect = canvas.getBoundingClientRect();
+  // getBoundingClientRect 已包含捲動偏移，直接取相對 canvas 左邊的 x
+  const x = e.clientX - rect.left;
+  const dur = videoDuration || (csvData.length ? csvData[csvData.length - 1].time : 1);
+  return Math.max(0, Math.min(dur, x / pxPerSec));
+}
+
+Object.values(chartCanvases).forEach(canvas => {
+  canvas.style.cursor = 'col-resize';
+
+  canvas.addEventListener('mousedown', e => {
+    chartDragging = true;
+    isSeeking = true;
+    scrubTo(chartTimeFromEvent(e));
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if (!chartDragging) return;
+    scrubTo(chartTimeFromEvent(e));
+  });
+});
+
+document.addEventListener('mouseup', () => {
+  if (chartDragging) {
+    chartDragging = false;
+    isSeeking = false;
+  }
+});
+
+// ── Single-view adaptive card layout ─────────────────────────────────────────
+function updateSvLayout() {
+  if (!document.body.classList.contains('single-view')) return;
+  const panel = document.getElementById('single-data-panel');
+  const metrics = panel.querySelector('.sv-metrics');
+  const h = metrics.getBoundingClientRect().height;
+  panel.classList.remove('sv-medium', 'sv-compact');
+  if (h < 90)       panel.classList.add('sv-compact'); // 1 row × 6
+  else if (h < 185) panel.classList.add('sv-medium');  // 2 rows × 3
+  // else: 3 rows × 2 (default)
+}
+
+// ── Trajectory Canvas ────────────────────────────────────────────────────────
+let trajWaypoints = [];
+let trajIsClosedLoop = false;
+let lastTrajLap = -1;
+let lastPoseForTraj = null;
+let trajMode = 'current'; // 'current' | 'all'
+const ARUCO_FWD  = 0.2;  // metres forward in robot frame
+const ARUCO_SIDE = 0.0;  // metres left in robot frame
+let showRobotTrack = true;
+let showArucoTrack = true;
+
+function buildTrajWaypoints(data) {
+  const wpMap = new Map();
+  for (const row of data) {
+    const key = String(row.waypoint);
+    if (!wpMap.has(key) && row.target_x != null && row.target_y != null) {
+      wpMap.set(key, { x: row.target_x, y: row.target_y });
+    }
+  }
+  const keys = [...wpMap.keys()].sort((a, b) => Number(a) - Number(b));
+  trajWaypoints = keys.map((k, i) => ({ ...wpMap.get(k), label: `P${i + 1}` }));
+  trajIsClosedLoop = trajWaypoints.length > 2;
+}
+
+function niceStep(range, targetCount) {
+  if (!range || !isFinite(range) || range <= 0) return 1;
+  const rough = range / targetCount;
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm = rough / mag;
+  const nice = norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10;
+  return nice * mag;
+}
+
+function drawTrajCanvas(currentLap, curX, curY, curYaw) {
+  const canvas = document.getElementById('traj-canvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth;
+  const H = canvas.clientHeight;
+  if (W <= 0 || H <= 0) return;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+
+  if (!poseData.length && !trajWaypoints.length) {
+    ctx.fillStyle = '#bbb';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(TRANSLATIONS[currentLang].traj_waiting, W / 2, H / 2);
+    return;
+  }
+
+  const allX = poseData.map(d => d.x).concat(trajWaypoints.map(w => w.x)).filter(isFinite);
+  const allY = poseData.map(d => d.y).concat(trajWaypoints.map(w => w.y)).filter(isFinite);
+  if (!allX.length) return;
+
+  const rawMinX = Math.min(...allX), rawMaxX = Math.max(...allX);
+  const rawMinY = Math.min(...allY), rawMaxY = Math.max(...allY);
+  const m = 0.18;
+  const extX = (rawMaxX - rawMinX) * m || 0.4;
+  const extY = (rawMaxY - rawMinY) * m || 0.4;
+  const dMinX = rawMinX - extX, dMaxX = rawMaxX + extX;
+  const dMinY = rawMinY - extY, dMaxY = rawMaxY + extY;
+  const dRangeX = dMaxX - dMinX, dRangeY = dMaxY - dMinY;
+
+  const pL = 50, pR = 14, pT = 14, pB = 40;
+  const plotW = W - pL - pR, plotH = H - pT - pB;
+  const s = Math.min(plotW / dRangeX, plotH / dRangeY) * 1.5;
+
+  // Coordinate transform: flip X (high X → left), low Y → top
+  // Matches physical camera view: P1 top, P2 bottom-left, P3 bottom-right
+  const plotOffX = pL + (plotW - dRangeX * s) / 2;
+  const plotOffY = pT + (plotH - dRangeY * s) / 2;
+
+  const cx = x => plotOffX + (dMaxX - x) * s;
+  const cy = y => plotOffY + (y - dMinY) * s;
+
+  // Grid lines
+  const gStepX = niceStep(dRangeX, 5);
+  const gStepY = niceStep(dRangeY, 5);
+  const tickFontSize = Math.max(9, Math.min(11, W / 32));
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+  ctx.lineWidth = 0.5;
+  ctx.fillStyle = '#666';
+  ctx.font = `${tickFontSize}px sans-serif`;
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const startGX = Math.ceil(dMinX / gStepX) * gStepX;
+  for (let i = 0; i < 20; i++) {
+    const gx = startGX + i * gStepX;
+    if (gx > dMaxX + 1e-9) break;
+    const canX = cx(gx);
+    if (canX < pL - 2 || canX > W - pR + 2) continue;
+    ctx.beginPath(); ctx.moveTo(canX, pT); ctx.lineTo(canX, H - pB); ctx.stroke();
+    if (Math.abs(gx - Math.round(gx)) < 1e-6) ctx.fillText(String(Math.round(gx)), canX, H - pB + 3);
+  }
+
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  const startGY = Math.ceil(dMinY / gStepY) * gStepY;
+  for (let i = 0; i < 20; i++) {
+    const gy = startGY + i * gStepY;
+    if (gy > dMaxY + 1e-9) break;
+    const canY = cy(gy);
+    if (canY < pT - 2 || canY > H - pB + 2) continue;
+    ctx.beginPath(); ctx.moveTo(pL, canY); ctx.lineTo(W - pR, canY); ctx.stroke();
+    if (Math.abs(gy - Math.round(gy)) < 1e-6) ctx.fillText(String(Math.round(gy)), pL - 4, canY);
+  }
+
+  // Axis labels
+  const axFontSize = Math.max(10, Math.min(12, W / 28));
+  ctx.font = `${axFontSize}px sans-serif`;
+  ctx.fillStyle = '#444';
+
+
+  // Lap path(s) — drawn before ideal path so waypoints render on top
+  if (trajMode === 'robot-all' || trajMode === 'aruco-all') {
+    const allLoops = [...new Set(poseData.map(d => d.loop))].sort((a, b) => a - b);
+    allLoops.forEach((loop, idx) => {
+      const ld = poseData.filter(d => d.loop === loop);
+      if (ld.length < 2) return;
+      const isCurrent = loop === currentLap;
+      const isArucoAll = trajMode === 'aruco-all';
+      const hue = Math.round((idx / Math.max(allLoops.length, 1)) * 300);
+      ctx.beginPath();
+      ctx.strokeStyle = isCurrent ? (isArucoAll ? '#FF0004' : '#006FFF') : `hsl(${hue},75%,52%)`;
+      ctx.lineWidth = isCurrent ? 2.5 : 1.4;
+      ctx.globalAlpha = isCurrent ? 1.0 : 0.65;
+      ctx.lineJoin = 'round';
+      ld.forEach((d, i) => {
+        if (isArucoAll) {
+          const yr = (d.yaw || 0) * Math.PI / 180;
+          const ax = d.x + Math.sin(yr) * ARUCO_FWD + Math.cos(yr) * ARUCO_SIDE;
+          const ay = d.y + Math.cos(yr) * ARUCO_FWD - Math.sin(yr) * ARUCO_SIDE;
+          i === 0 ? ctx.moveTo(cx(ax), cy(ay)) : ctx.lineTo(cx(ax), cy(ay));
+        } else {
+          i === 0 ? ctx.moveTo(cx(d.x), cy(d.y)) : ctx.lineTo(cx(d.x), cy(d.y));
+        }
+      });
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 1.0;
+  } else {
+    const lapData = poseData.filter(d => d.loop === currentLap);
+    // ArUco track (same data source for now, drawn first = underneath robot)
+    if (showArucoTrack && lapData.length > 1) {
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(255,0,4,0.5)';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      lapData.forEach((d, i) => {
+        const yr = (d.yaw || 0) * Math.PI / 180;
+        const ax = d.x + Math.sin(yr) * ARUCO_FWD + Math.cos(yr) * ARUCO_SIDE;
+        const ay = d.y + Math.cos(yr) * ARUCO_FWD - Math.sin(yr) * ARUCO_SIDE;
+        i === 0 ? ctx.moveTo(cx(ax), cy(ay)) : ctx.lineTo(cx(ax), cy(ay));
+      });
+      ctx.stroke();
+    }
+    // Robot track (drawn on top)
+    if (showRobotTrack && lapData.length > 1) {
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(0,111,255,0.5)';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      lapData.forEach((d, i) => {
+        i === 0 ? ctx.moveTo(cx(d.x), cy(d.y)) : ctx.lineTo(cx(d.x), cy(d.y));
+      });
+      ctx.stroke();
+    }
+  }
+
+  // Ideal path (dashed black)
+  if (trajWaypoints.length > 1) {
+    ctx.beginPath();
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 5]);
+    ctx.lineJoin = 'round';
+    trajWaypoints.forEach((wp, i) => {
+      i === 0 ? ctx.moveTo(cx(wp.x), cy(wp.y)) : ctx.lineTo(cx(wp.x), cy(wp.y));
+    });
+    if (trajIsClosedLoop) ctx.lineTo(cx(trajWaypoints[0].x), cy(trajWaypoints[0].y));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Waypoints (red dots with P labels) — unchanged
+  const wpR = Math.max(4, Math.min(7, W / 60));
+  trajWaypoints.forEach(wp => {
+    const x = cx(wp.x), y = cy(wp.y);
+    ctx.beginPath();
+    ctx.arc(x, y, wpR, 0, Math.PI * 2);
+    ctx.fillStyle = '#e53935';
+    ctx.fill();
+    ctx.strokeStyle = '#b71c1c';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#b71c1c';
+    ctx.font = `bold ${axFontSize}px sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(wp.label, x + wpR + 3, y - 2);
+  });
+
+  // Helper: draw position marker (dot + arrow) at canvas coords (rx, ry)
+  function drawPosMarker(rx, ry, color, haloColor) {
+    if (rx < pL - 10 || rx > W - pR + 10 || ry < pT - 10 || ry > H - pB + 10) return;
+    ctx.beginPath();
+    ctx.arc(rx, ry, 10, 0, Math.PI * 2);
+    ctx.fillStyle = haloColor;
+    ctx.fill();
+    if (curYaw != null && isFinite(curYaw)) {
+      const dispYaw = curYaw - 180;
+      const radYaw = dispYaw * Math.PI / 180;
+      const arrowLen = 32;
+      const adx = Math.sin(radYaw) * arrowLen;
+      const ady = -Math.cos(radYaw) * arrowLen;
+      const headAngle = Math.atan2(ady, adx);
+      const tipX = rx + adx, tipY = ry + ady;
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.moveTo(rx, ry);
+      ctx.lineTo(rx + adx * 0.68, ry + ady * 0.68);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - 14 * Math.cos(headAngle - 0.55), tipY - 14 * Math.sin(headAngle - 0.55));
+      ctx.lineTo(tipX - 14 * Math.cos(headAngle + 0.55), tipY - 14 * Math.sin(headAngle + 0.55));
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.arc(rx, ry, 6, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  if (curX != null && curY != null && isFinite(curX) && isFinite(curY) && trajMode === 'current') {
+    // ArUco marker: red, y offset -0.2 (only in current-lap mode when visible)
+    if (trajMode === 'current' && showArucoTrack) {
+      const ayr = (curYaw || 0) * Math.PI / 180;
+      const aX = curX + Math.sin(ayr) * ARUCO_FWD + Math.cos(ayr) * ARUCO_SIDE;
+      const aY = curY + Math.cos(ayr) * ARUCO_FWD - Math.sin(ayr) * ARUCO_SIDE;
+      drawPosMarker(cx(aX), cy(aY), '#FF0004', 'rgba(255,0,4,0.15)');
+    }
+    // Robot marker: blue
+    if (trajMode !== 'current' || showRobotTrack) {
+      drawPosMarker(cx(curX), cy(curY), '#006FFF', 'rgba(0,111,255,0.15)');
+    }
+  }
+
+  // Lap label (top-left)
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.font = `bold ${axFontSize + 1}px sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  const lapLabel = trajMode === 'current' ? `第${currentLap + 1}/${totalLoops}圈` : ``;
+  ctx.fillText(lapLabel, pL + 4, pT + 2);
+
+  updateTrajSimilarity(currentLap);
+}
+
+// Trajectory mode tab handler
+document.querySelectorAll('.traj-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.traj-mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    trajMode = btn.dataset.trajMode;
+    document.getElementById('traj-legend').style.display =
+      trajMode === 'current' ? 'flex' : 'none';
+    const _p = lastPoseForTraj;
+    drawTrajCanvas(lastTrajLap >= 0 ? lastTrajLap : 0, _p?.x, _p?.y, _p?.yaw);
+  });
+});
+
+// Trajectory legend eye-icon toggle
+document.querySelectorAll('.traj-legend-row').forEach(row => {
+  row.addEventListener('click', () => {
+    const track = row.dataset.track;
+    if (track === 'robot') showRobotTrack = !showRobotTrack;
+    else if (track === 'aruco') showArucoTrack = !showArucoTrack;
+    const vis = track === 'robot' ? showRobotTrack : showArucoTrack;
+    row.classList.toggle('track-hidden', !vis);
+    const _p = lastPoseForTraj;
+    drawTrajCanvas(lastTrajLap >= 0 ? lastTrajLap : 0, _p?.x, _p?.y, _p?.yaw);
+  });
+});
+
+// Initial placeholder render once layout is settled
+requestAnimationFrame(() => drawTrajCanvas(0, null, null, null));
+
+// ── DTW Trajectory Similarity ─────────────────────────────────────────────────
+function downsampleSeq(seq, maxPts) {
+  if (seq.length <= maxPts) return seq;
+  const result = [];
+  for (let i = 0; i < maxPts; i++) {
+    result.push(seq[Math.round(i * (seq.length - 1) / (maxPts - 1))]);
+  }
+  return result;
+}
+
+function computeDTWDistance(seqA, seqB) {
+  const n = seqA.length, m = seqB.length;
+  if (n < 2 || m < 2) return null;
+  const eucl = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+  const prev = new Float64Array(m);
+  const curr = new Float64Array(m);
+  prev[0] = eucl(seqA[0], seqB[0]);
+  for (let j = 1; j < m; j++) prev[j] = prev[j - 1] + eucl(seqA[0], seqB[j]);
+  for (let i = 1; i < n; i++) {
+    curr[0] = prev[0] + eucl(seqA[i], seqB[0]);
+    for (let j = 1; j < m; j++) {
+      curr[j] = eucl(seqA[i], seqB[j]) + Math.min(prev[j], curr[j - 1], prev[j - 1]);
+    }
+    prev.set(curr);
+  }
+  return prev[m - 1];
+}
+
+function updateTrajSimilarity(currentLap) {
+  const panel = document.getElementById('traj-similarity');
+  if (!panel) return;
+  if (trajMode !== 'current') { panel.style.display = 'none'; return; }
+
+  const lapData = poseData.filter(d => d.loop === currentLap);
+  if (lapData.length < 4) { panel.style.display = 'none'; return; }
+
+  panel.style.display = 'block';
+
+  const robotSeq = downsampleSeq(lapData.map(d => ({ x: d.x, y: d.y })), 200);
+  const arucoSeq = downsampleSeq(lapData.map(d => {
+    const yr = (d.yaw || 0) * Math.PI / 180;
+    return {
+      x: d.x + Math.sin(yr) * ARUCO_FWD + Math.cos(yr) * ARUCO_SIDE,
+      y: d.y + Math.cos(yr) * ARUCO_FWD - Math.sin(yr) * ARUCO_SIDE,
+    };
+  }), 200);
+
+  const dtwDist = computeDTWDistance(robotSeq, arucoSeq);
+  if (dtwDist == null) { panel.style.display = 'none'; return; }
+
+  const normalizedDTW = dtwDist / Math.max(robotSeq.length, arucoSeq.length);
+  const similarity = Math.min(100, Math.max(0, Math.exp(-normalizedDTW) * 100));
+
+  document.getElementById('sim-dtw').textContent  = dtwDist.toFixed(2);
+  const ndtwEl = document.getElementById('sim-ndtw');
+  ndtwEl.textContent = normalizedDTW.toFixed(2);
+  ndtwEl.style.color = similarity >= 80 ? '#16a34a' : similarity >= 60 ? '#d97706' : '#dc2626';
+}
+
+// ── i18n ─────────────────────────────────────────────────────────────────────
+const TRANSLATIONS = {
+  zh: {
+    app_title: '移動機器人數據可視化平台',
+    view_dual: '雙視圖', view_triple: '虛實驗證模式', view_single: '數據分析模式',
+    cam_a: '機器人移動畫面', cam_b: '虛擬實境畫面（ArUco）', cam_traj: '軌跡圖',
+    pick_video: '選取影片',
+    offset_webcam: 'Webcam 偏移(s)', offset_aruco: 'ArUco 偏移(s)',
+    robot_data: '機器人數據',
+    pwm_left: 'PWM Left', pwm_right: 'PWM Right',
+    speed: '速度', angular: '角速度',
+    lwheel: '左輪速度', rwheel: '右輪速度',
+    traj_current: '當前圈', traj_robot_all: '機器人總合圖', traj_aruco_all: 'ArUco總合圖',
+    traj_robot_track: '機器人軌跡', traj_aruco_track: 'ArUco軌跡',
+    traj_waiting: '等待軌跡資料…', traj_all_laps_label: '(總合圈)',
+    sim_title: '軌跡相似度分析', sim_dtw_dist: 'DTW距離', sim_ndtw: '正規化DTW距離', sim_similarity: '軌跡相似度',
+    sim_tooltip: '數值越高代表兩條軌跡的運動模式越一致。',
+    overlay_loop: (n, t) => `第 ${n} / ${t} 圈`,
+    overlay_pos:  (x, y) => `目前位置 : (${x},${y})`,
+    overlay_dist: (wp, d) => `離目標點 [${wp}] : ${d}m`,
+  },
+  en: {
+    app_title: 'Mobile Robot Data Visualization',
+    view_dual: 'Dual View', view_triple: 'VR Verification', view_single: 'Data Analysis',
+    cam_a: 'Robot Camera', cam_b: 'AR Camera (ArUco)', cam_traj: 'Trajectory',
+    pick_video: 'Select Video',
+    offset_webcam: 'Webcam Offset(s)', offset_aruco: 'ArUco Offset(s)',
+    robot_data: 'Robot Data',
+    pwm_left: 'PWM Left', pwm_right: 'PWM Right',
+    speed: 'Speed', angular: 'Angular Velocity',
+    lwheel: 'Left Wheel Speed', rwheel: 'Right Wheel Speed',
+    traj_current: 'Current Lap', traj_robot_all: 'Robot All Laps', traj_aruco_all: 'ArUco All Laps',
+    traj_robot_track: 'Robot Track', traj_aruco_track: 'ArUco Track',
+    traj_waiting: 'Waiting for trajectory data…', traj_all_laps_label: '(All Laps)',
+    sim_title: 'Trajectory Similarity', sim_dtw_dist: 'DTW Distance', sim_ndtw: 'Normalized DTW', sim_similarity: 'Similarity',
+    sim_tooltip: 'Higher values indicate the two trajectories share more similar motion patterns.',
+    overlay_loop: (n, t) => `Lap ${n} / ${t}`,
+    overlay_pos:  (x, y) => `Position : (${x},${y})`,
+    overlay_dist: (wp, d) => `Dist. [${wp}] : ${d}m`,
+  }
+};
+let currentLang = 'zh';
+
+function setLang(lang) {
+  currentLang = lang;
+  const T = TRANSLATIONS[lang];
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const val = T[el.dataset.i18n];
+    if (typeof val === 'string') el.textContent = val;
+  });
+  document.querySelectorAll('[data-i18n-tip]').forEach(el => {
+    const val = T[el.dataset.i18nTip];
+    if (typeof val === 'string') el.dataset.tip = val;
+  });
+  document.querySelectorAll('.lang-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.lang === lang));
+}
+
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => setLang(btn.dataset.lang));
+});
+
+
+// ── View tab toggle ───────────────────────────────────────────────────────────
+document.querySelectorAll('.view-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const view = tab.dataset.view;
+    document.body.classList.remove('triple-view', 'single-view');
+    if (view === 'triple') document.body.classList.add('triple-view');
+    if (view === 'single') document.body.classList.add('single-view');
+    window.dispatchEvent(new Event('resize'));
+    requestAnimationFrame(updateSvLayout);
+    if (view === 'triple') {
+      const _p = lastPoseForTraj;
+      requestAnimationFrame(() => drawTrajCanvas(lastTrajLap >= 0 ? lastTrajLap : 0, _p?.x, _p?.y, _p?.yaw));
+    }
+  });
+});
+
+// ── Single-view controls sync ─────────────────────────────────────────────────
+document.getElementById('sv-btn-play').addEventListener('click', () => {
+  document.getElementById('btn-play').click();
+});
+document.getElementById('sv-btn-rew').addEventListener('click', () => seek(-5));
+document.getElementById('sv-btn-fwd').addEventListener('click', () => seek(5));
+
+const svTimeline = document.getElementById('sv-timeline');
+svTimeline.addEventListener('input', () => {
+  isSeeking = true;
+  const dur = videoDuration || (csvData.length ? csvData[csvData.length - 1].time : 0);
+  const t = (svTimeline.value / 1000) * dur;
+  timeline.value = svTimeline.value;
+  timeline.style.setProperty('--pct', (dur ? (t / dur) * 100 : 0) + '%');
+  scrubTo(t);
+});
+svTimeline.addEventListener('change', () => { isSeeking = false; });
+
+document.getElementById('sv-offset-webcam').addEventListener('input', e => {
+  webcamOffset = parseFloat(e.target.value) || 0;
+  document.getElementById('offset-webcam').value = e.target.value;
+  updateOverlay(vidA.currentTime || 0);
+});
+// ── Lap stats dialog ─────────────────────────────────────────────────────────
+function computeLapStats() {
+  if (!poseData.length) return [];
+  const groups = {};
+  poseData.forEach(d => {
+    if (!groups[d.loop]) groups[d.loop] = [];
+    groups[d.loop].push(d);
+  });
+  return Object.keys(groups).sort((a, b) => +a - +b).map(loop => {
+    const pts = groups[loop];
+    const dur = pts[pts.length - 1].time - pts[0].time;
+    let dist = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const dx = pts[i].x - pts[i - 1].x;
+      const dy = pts[i].y - pts[i - 1].y;
+      dist += Math.sqrt(dx * dx + dy * dy);
+    }
+    const robotSeq = downsampleSeq(pts.map(d => ({ x: d.x, y: d.y })), 200);
+    const arucoSeq = downsampleSeq(pts.map(d => {
+      const yr = (d.yaw || 0) * Math.PI / 180;
+      return {
+        x: d.x + Math.sin(yr) * ARUCO_FWD + Math.cos(yr) * ARUCO_SIDE,
+        y: d.y + Math.cos(yr) * ARUCO_FWD - Math.sin(yr) * ARUCO_SIDE,
+      };
+    }), 200);
+    const dtwDist = computeDTWDistance(robotSeq, arucoSeq);
+    const ndtw = dtwDist == null ? null : dtwDist / Math.max(robotSeq.length, arucoSeq.length);
+    const sim = ndtw == null ? null : Math.min(100, Math.max(0, Math.exp(-ndtw) * 100));
+    return { lap: +loop + 1, dur, dist, ndtw, sim };
+  });
+}
+
+document.getElementById('traj-stats-btn').addEventListener('click', () => {
+  const isZh = currentLang === 'zh';
+  document.getElementById('traj-stats-title').textContent  = isZh ? '各圈統計' : 'Lap Statistics';
+  document.getElementById('traj-stats-th-lap').textContent  = isZh ? '圈數' : 'Lap';
+  document.getElementById('traj-stats-th-time').textContent = isZh ? '時間 (s)' : 'Time (s)';
+  document.getElementById('traj-stats-th-dist').textContent = isZh ? '距離 (m)' : 'Dist (m)';
+  document.getElementById('traj-stats-th-sim').textContent  = isZh ? '正規化DTW' : 'Norm. DTW';
+
+  const stats = computeLapStats();
+  const tbody = document.querySelector('#traj-stats-table tbody');
+  tbody.innerHTML = stats.map(s => {
+    const ndtwColor = s.sim == null ? '' :
+      s.sim >= 80 ? 'color:#16a34a;font-weight:600' :
+      s.sim >= 60 ? 'color:#d97706;font-weight:600' : 'color:#dc2626;font-weight:600';
+    const ndtwText = s.ndtw == null ? '—' : s.ndtw.toFixed(2);
+    return `
+    <tr>
+      <td>${isZh ? '第 ' + s.lap + ' 圈' : 'Lap ' + s.lap}</td>
+      <td>${s.dur.toFixed(1)}</td>
+      <td>${s.dist.toFixed(2)}</td>
+      <td style="${ndtwColor}">${ndtwText}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('traj-stats-modal').classList.add('open');
+});
+
+document.getElementById('traj-stats-close').addEventListener('click', () => {
+  document.getElementById('traj-stats-modal').classList.remove('open');
+});
+document.getElementById('traj-stats-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+});
+
+// ── keep main offset-webcam in sync with sv
+const origOffsetWebcam = document.getElementById('offset-webcam');
+origOffsetWebcam._origListener = origOffsetWebcam.oninput;
+origOffsetWebcam.addEventListener('input', e => {
+  document.getElementById('sv-offset-webcam').value = e.target.value;
+});
+</script>
+</body>
+</html>
