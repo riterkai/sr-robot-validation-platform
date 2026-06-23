@@ -86,18 +86,4 @@ Metrics include:
 
 These metrics are used to evaluate virtual-physical mapping consistency.
 
-
 ⸻
-
-Research Information
-
-National Taipei University of Technology
-
-Advisor:
-Prof. Ping-Hsuan Han
-
-⸻
-
-License
-
-MIT License
